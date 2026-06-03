@@ -28,8 +28,15 @@ class ClientThread(threading.Thread):
         # Open the Windows virtual Bluetooth serial port.
         # read_timeout=0.1 makes read() return quickly when no data is ready.
         self.sock = serial.Serial(com_port, timeout=0.1)
-        # Flush any stale bytes left in the buffer from previous connection attempts.
+
+        # The printer sends an unsolicited greeting frame immediately after the
+        # RFCOMM link is established — AFTER the port opens, so flushing before
+        # sleeping would miss it.  Wait long enough for the greeting to fully
+        # arrive, then flush it so the first thing we send is StartSession into
+        # a clean, ready printer.
+        time.sleep(1.5)
         self.sock.reset_input_buffer()
+
         self.alive.set()
         self.daemon = True
         self.start()
