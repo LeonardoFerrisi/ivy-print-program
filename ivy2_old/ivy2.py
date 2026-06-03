@@ -29,13 +29,45 @@ PRINT_DATA_CHUNK = 990
 
 
 class Ivy2Printer:
-    client = ClientThread()
+    def __init__(self):
+        self.client = ClientThread()
 
-    def connect(self, mac_address, port=1):
-        self.client.connect(mac_address, port)
-        battery_level, mtu = self.__start_session()
+    def connect(self, mac_address, port=1, com_port=None, start_session_timeout=12, retries=2):
+        """Connect to the printer.
 
-        logger.debug("Connected; Battery level: {}; MTU: {}".format(battery_level, mtu))
+        On Windows, pair the printer first then pass com_port='COM3' (or
+        whichever port Windows assigned) instead of relying on raw RFCOMM.
+        """
+        last_error = None
+
+        for attempt in range(retries + 1):
+            # Create a fresh client thread for each attempt.
+            self.client = ClientThread()
+            if com_port:
+                self.client.connect(com_port)
+            else:
+                self.client.connect(mac_address, port)
+
+            try:
+                battery_level, mtu = self.__start_session(start_session_timeout)
+
+                logger.debug(
+                    "Connected; Battery level: {}; MTU: {}".format(
+                        battery_level,
+                        mtu
+                    )
+                )
+                return
+            except ReceiveTimeoutError as error:
+                last_error = error
+                logger.warning(
+                    "Start session timed out (attempt {}/{}).",
+                    attempt + 1,
+                    retries + 1
+                )
+                self.disconnect()
+
+        raise last_error if last_error else ReceiveTimeoutError()
 
     def disconnect(self):
         self.client.disconnect()
@@ -127,18 +159,13 @@ class Ivy2Printer:
         if is_wrong_smart_sheet:
             raise WrongSmartSheetError()
 
-    def __start_session(self):
-        return self.__perform_task(StartSessionTask())
+    def __start_session(self, timeout=5):
+        return self.__perform_task(StartSessionTask(), timeout)
 
-    def __perform_task(self, task):
+    def __perform_task(self, task, timeout=5):
         # send the task's message
         self.__send_message(task.get_message())
-        response = self.__receive_message()
-
-        if response[2] != task.ack:
-            raise AckError("Got invalid ack; expected {} but got {}".format(
-                task.ack, response[3]
-            ))
+        response = self.__receive_message(timeout, expected_ack=task.ack)
 
         # process and return the response
         return task.process_response(response)
@@ -150,7 +177,7 @@ class Ivy2Printer:
         # add the message to the client thread's outbound queue
         self.client.outbound_q.put(message)
 
-    def __receive_message(self, timeout=5):
+    def __receive_message(self, timeout=5, expected_ack=None):
         start = int(time.time())
         while int(time.time()) < (start + timeout):
             if not self.client.alive.is_set():
@@ -162,11 +189,25 @@ class Ivy2Printer:
                     self.client.inbound_q.get(False, 0.1)
                 )
 
+                if response is None:
+                    continue
+
                 logger.debug(
                     "Received message: ack: {}, error: {}",
                     response[2],
                     response[3]
                 )
+
+                # Discard unsolicited frames (e.g. printer status broadcasts)
+                # and keep waiting for the reply we actually sent for.
+                if expected_ack is not None and response[2] != expected_ack:
+                    logger.debug(
+                        "Discarding unsolicited frame with ack: {} (expected: {})",
+                        response[2],
+                        expected_ack
+                    )
+                    continue
+
                 return response
             except queue.Empty:
                 pass

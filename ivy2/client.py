@@ -1,4 +1,4 @@
-import serial
+import bluetooth
 import queue
 import threading
 import time
@@ -24,45 +24,36 @@ class ClientThread(threading.Thread):
             self.disconnect
         )
 
-    def connect(self, com_port):
-        # Open the Windows virtual Bluetooth serial port.
-        # read_timeout=0.1 makes read() return quickly when no data is ready.
-        self.sock = serial.Serial(com_port, timeout=0.1)
+    def connect(self, mac, port):
+        # create socket and connect
+        sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+        sock.connect((mac, port))
 
-        # The printer sends an unsolicited greeting frame immediately after the
-        # RFCOMM link is established — AFTER the port opens, so flushing before
-        # sleeping would miss it.  Wait long enough for the greeting to fully
-        # arrive, then flush it so the first thing we send is StartSession into
-        # a clean, ready printer.
-        time.sleep(1.5)
-        self.sock.reset_input_buffer()
-
+        self.sock = sock
         self.alive.set()
-        self.daemon = True
         self.start()
 
     def run(self):
-        # Serial is a byte stream, not message-framed like RFCOMM sockets.
-        # Buffer incoming bytes and emit one complete frame at a time so the
-        # parser always receives exactly one message rather than a concatenated blob.
-        FRAME_SIZE = 34
-        recv_buffer = bytearray()
-
         while self.alive.is_set():
-            # check that the port is still open
-            if not self.sock or not self.sock.is_open:
-                self.disconnect()
-                break
-
-            # send any outbound messages
+            # check that the socket is still active
             try:
+                self.sock.getpeername()
+            except bluetooth.btcommon.BluetoothError:
+                self.disconnect()
+
+            # block for sending messages
+            self.sock.setblocking(True)
+
+            # send any out bound messages
+            try:
+                # get the next out queue item
                 message = self.outbound_q.get(True, 0.1)
 
-                self.sock.write(message)
+                self.sock.send(message)
 
                 time.sleep(0.02)
 
-                # reset the auto-disconnect timer
+                # reset the timer
                 self.disconnect_timer.cancel()
                 self.disconnect_timer = threading.Timer(
                     AUTO_DISCONNECT_TIMEOUT,
@@ -71,22 +62,17 @@ class ClientThread(threading.Thread):
             except queue.Empty:
                 pass
 
-            # receive incoming bytes into the buffer
+            # skip blocking for receiving messages, an exception will be raised if there's no data
+            self.sock.setblocking(False)
+
+            # receive incoming messages
             try:
-                data = self.sock.read(self.receive_size)
-
-                if data:
-                    recv_buffer.extend(data)
-
-                    # Emit one complete frame at a time into the inbound queue.
-                    while len(recv_buffer) >= FRAME_SIZE:
-                        self.inbound_q.put(bytes(recv_buffer[:FRAME_SIZE]))
-                        recv_buffer = recv_buffer[FRAME_SIZE:]
-            except (OSError, serial.SerialException):
+                self.inbound_q.put(self.sock.recv(self.receive_size))
+            except bluetooth.btcommon.BluetoothError:
                 pass
 
     def disconnect(self, timeout=None):
-        if self.sock and self.sock.is_open:
+        if self.sock:
             self.sock.close()
 
         self.disconnect_timer.cancel()
