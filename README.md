@@ -4,7 +4,7 @@ Program for printing a png to a canon ivy printer
 The IVY1 is a bluetooth only device,
 
 
-# Canon Ivy 1 (PV-123) — Python Print API
+# Canon Ivy 1 (PV-123) - Python Print API
 
 A Python script to print images on the Canon Ivy 1 (PV-123) mini photo printer from Windows over Bluetooth.
 
@@ -33,7 +33,7 @@ Update `PRINTER_MAC` at the top of `ivy1_print.py` to match your printer's Bluet
 
 ### Overview
 
-The Canon Ivy 1 uses a completely different protocol from the Canon Ivy 2. The Ivy 2 uses a custom 34-byte binary command protocol over a single RFCOMM channel. The Ivy 1 uses standard **OBEX Object Push Profile (OPP)** — the same protocol Bluetooth uses for generic file transfer.
+The Canon Ivy 1 uses a completely different protocol from the Canon Ivy 2. The Ivy 2 uses a custom 34-byte binary command protocol over a single RFCOMM channel. The Ivy 1 uses standard **OBEX Object Push Profile (OPP)** - the same protocol Bluetooth uses for generic file transfer.
 
 To print, you push a JPEG file to the printer over OBEX. The printer receives it and prints it. No special setup commands, handshakes, or state machines are required on the OBEX channel.
 
@@ -49,7 +49,7 @@ The Ivy 1 exposes three RFCOMM services:
 
 The Canon Mini Print app opens all three simultaneously, but only the OPP channel is needed to print.
 
-### Port 1 — Status Channel (`FF 55` Protocol)
+### Port 1 - Status Channel (`FF 55` Protocol)
 
 On connect, the printer immediately sends a 6-byte greeting:
 
@@ -74,9 +74,9 @@ Decoded fields (partial):
 | 13–14 | `05 dc` | Max payload (1500) |
 | 19 | `0a` | Auto power-off (10 minutes) |
 
-If you don't respond to the greeting, the printer resends `ff 55 02 00 ee 10` every second. This channel is informational only — you do not need it to print.
+If you don't respond to the greeting, the printer resends `ff 55 02 00 ee 10` every second. This channel is informational only - you do not need it to print.
 
-### Port 2 — Command Channel (`1B 2A` Protocol)
+### Port 2 - Command Channel (`1B 2A` Protocol)
 
 This channel uses 34-byte binary packets with the same structure as the Ivy 2 protocol, but with start code `0x1B2A` instead of `0x430F`:
 
@@ -91,7 +91,7 @@ Bytes 8–33: Payload
 
 The printer responds to every command with `ack=0x0104` and `error=0`. The Canon app uses this channel to poll printer status during printing. It is not required to initiate or complete a print job.
 
-### OPP Channel — Image Transfer (OBEX Object Push)
+### OPP Channel - Image Transfer (OBEX Object Push)
 
 This is the only channel needed for printing. The protocol is standard OBEX:
 
@@ -172,7 +172,7 @@ The physical ZINK paper is 2×3 inches. The printer consumes roughly 345 pixels 
        640px
 ```
 
-The `ivy1_print.py` script handles all image preparation automatically — just pass any image file and it will be scaled, cropped, and formatted correctly.
+The `ivy1_print.py` script handles all image preparation automatically - just pass any image file and it will be scaled, cropped, and formatted correctly.
 
 ## Differences from Canon Ivy 2
 
@@ -187,11 +187,11 @@ The `ivy1_print.py` script handles all image preparation automatically — just 
 
 ## Troubleshooting
 
-**"Could not find OBEX service"** — Make sure the printer is powered on, paired in Windows Bluetooth settings, and not connected to your phone's Canon Mini Print app (only one device can connect at a time).
+**"Could not find OBEX service"** - Make sure the printer is powered on, paired in Windows Bluetooth settings, and not connected to your phone's Canon Mini Print app (only one device can connect at a time).
 
-**Image prints but is cropped** — The visible area is ~640×925 in the center. Make sure your content isn't in the top/bottom margins.
+**Image prints but is cropped** - The visible area is ~640×925 in the center. Make sure your content isn't in the top/bottom margins.
 
-**Script hangs on connect** — The printer may have gone to sleep. Press the power button to wake it, then retry.
+**Script hangs on connect** - The printer may have gone to sleep. Press the power button to wake it, then retry.
 
 ## How This Was Reverse Engineered
 

@@ -2,7 +2,7 @@
 Canon Ivy 1 (PV-123) Print Script for Windows
 
 Sends a JPEG image to the printer via OBEX Object Push over Bluetooth.
-No external Bluetooth libraries needed — uses Python's built-in socket module.
+No external Bluetooth libraries needed - uses Python's built-in socket module.
 
 Requirements:
     pip install Pillow
@@ -123,7 +123,7 @@ def send_image_obex(sock, jpeg_data):
     offset = 0
 
     if len(jpeg_data) <= first_chunk_size:
-        # Single packet — use PUT FINAL + END_OF_BODY
+        # Single packet - use PUT FINAL + END_OF_BODY
         body_hdr = make_header_bytes(HEADER_END_BODY, jpeg_data)
         headers = name_hdr + type_hdr + length_hdr + body_hdr
         pkt = struct.pack(">BH", OBEX_PUT_FINAL, 3 + len(headers)) + headers
